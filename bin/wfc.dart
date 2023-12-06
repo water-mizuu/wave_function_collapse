@@ -56,15 +56,13 @@ E selectRandom<E>(Iterable<E> iterable) {
 }
 
 abstract base class BacktrackingWaveFunctionCollapse {
-  bool get displayToConsole;
-
   const BacktrackingWaveFunctionCollapse();
 
-  static const Set<int> _nullTried = <int>{};
+  static const Set<int> _nullTried = {};
   static const Index _nullIndex = (-1, -1);
 
   String renderSet(Wave wave) {
-    List<int> profile = <int>[
+    List<int> profile = [
       for (int x = 0; x < wave[0].length; ++x)
         wave //
             .map((List<Superposition> row) => row[x].toString().length)
@@ -78,7 +76,7 @@ abstract base class BacktrackingWaveFunctionCollapse {
   }
 
   Set<Index> reduceIndices(Wave wave, Map<Index, Set<int>> reduction, Set<Index> indices) => //
-      <Index>{
+      {
         for (var (Index key, Set<int> value) in reduction.pairs)
           if (indices.contains(key))
             if (wave.get(key).difference(value) case Superposition(length: 1)) key
@@ -101,7 +99,7 @@ abstract base class BacktrackingWaveFunctionCollapse {
     int backtracks = 0;
 
     // Set of indices that can be collapsed
-    Set<Index> indices = <Index>{
+    Set<Index> indices = {
       for (int y = 0; y < wave.length; ++y)
         for (int x = 0; x < wave[y].length; ++x)
           // Add indices with multiple possibilities to the set
@@ -158,7 +156,7 @@ abstract base class BacktrackingWaveFunctionCollapse {
 
         // Propagate the changes caused by the collapse and get the reduction
         Map<Index, Superposition> propagationMap = computePropagation(wave, index, value)
-          ..[index] = wave.get(index).difference(<int>{value});
+          ..[index] = wave.get(index).difference({value});
 
         // Compute the changes
         Set<Index> removals = reduceIndices(wave, propagationMap, indices);
@@ -176,7 +174,7 @@ abstract base class BacktrackingWaveFunctionCollapse {
           index: index,
           removals: removals,
           propagationMap: propagationMap,
-          tried: tried.union(<int>{value}),
+          tried: tried.union({value}),
         ));
 
         // Reset the tried values and the trying index

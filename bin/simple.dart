@@ -17,7 +17,7 @@ typedef Color = (int, int, int);
 
 final class SimpleCollapse extends BacktrackingWaveFunctionCollapse {
   /// ─│┐ ┘ ┌ └
-  static const List<Tile> tiles = <Tile>[
+  static const List<Tile> tiles = [
     (display: " ", socket: (top: "0", bottom: "0", left: "0", right: "0")), // 0
     (display: "─", socket: (top: "0", bottom: "0", left: "1", right: "1")), // 1
     (display: "│", socket: (top: "1", bottom: "1", left: "0", right: "0")), // 2
@@ -38,20 +38,14 @@ final class SimpleCollapse extends BacktrackingWaveFunctionCollapse {
 
   const SimpleCollapse();
 
-  @override
-  bool get displayToConsole => true;
-
   Wave generateWave(Board board, {required bool border}) {
     int height = board.length;
     int width = board[0].length;
 
-    Wave wave = <List<Superposition>>[
+    Wave wave = [
       for (int y = 0; y < height; ++y)
-        <Superposition>[
-          for (int x = 0; x < width; ++x)
-            <int>{
-              for (int i = 0; i < tiles.length; ++i) i,
-            },
+        [
+          for (int x = 0; x < width; ++x) {for (int i = 0; i < tiles.length; ++i) i},
         ],
     ];
 
@@ -86,15 +80,15 @@ final class SimpleCollapse extends BacktrackingWaveFunctionCollapse {
 
   @override
   Map<Index, Set<int>> computePropagation(Wave wave, Index index, int value) {
-    Map<Index, Superposition> remove = <Index, Superposition>{} //
-      ..[index] = wave.get(index).difference(<int>{value});
+    Map<Index, Superposition> remove = {} //
+      ..[index] = wave.get(index).difference({value});
     Queue<Index> queue = Queue<Index>()..add(index);
 
     while (queue.isNotEmpty) {
       var (Index index && (int y, int x)) = queue.removeFirst();
       var (int height, int width) = (wave.length, wave[y].length);
 
-      List<(Index, SocketCheck)> neighborChecks = <(Index, SocketCheck)>[
+      List<(Index, SocketCheck)> neighborChecks = [
         /// If we have a left, check left compatibility.
         if (x > 0) ((y, x - 1), (int t, int adj) => tiles[t].socket.left == tiles[adj].socket.right),
 
@@ -108,9 +102,9 @@ final class SimpleCollapse extends BacktrackingWaveFunctionCollapse {
         if (y < height - 1) ((y + 1, x), (int t, int adj) => tiles[t].socket.bottom == tiles[adj].socket.top),
       ];
 
-      Superposition possibleForCurrent = wave.get(index).difference(remove[index] ?? <int>{});
+      Superposition possibleForCurrent = wave.get(index).difference(remove[index] ?? {});
       for (var (Index neighborIndex, SocketCheck check) in neighborChecks) {
-        Superposition neighborPossible = wave.get(neighborIndex).difference(remove[neighborIndex] ?? <int>{});
+        Superposition neighborPossible = wave.get(neighborIndex).difference(remove[neighborIndex] ?? {});
 
         for (int neighborChoice in neighborPossible) {
           if (possibleForCurrent.every((int p) => !check(p, neighborChoice))) {
@@ -166,7 +160,7 @@ void main() async {
   const int width = 24;
 
   Board board = List2<int>.generate(height, (_) => List<int>.generate(width, (_) => -1));
-  Wave wave = simple.generateWave(board, border: false);
+  Wave wave = simple.generateWave(board, border: true);
 
   time(() async {
     for (var (Wave wave, _, _) in simple.collapse(wave)) {

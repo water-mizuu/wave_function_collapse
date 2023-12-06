@@ -1,23 +1,20 @@
+// ignore_for_file: always_specify_types
+
+import "dart:async";
 import "dart:collection";
-import "dart:io";
+import "dart:isolate";
 import "dart:math" as math;
 
 import "package:wave_function_collapse/shared.dart";
-import "package:wave_function_collapse/stdio.dart";
-import "package:wave_function_collapse/time.dart";
 
 import "wfc.dart";
 
 typedef Board = List2<int>;
-typedef Color = (int r, int g, int b);
 
 const SudokuCollapse sudoku = SudokuCollapse();
 
 final class SudokuCollapse extends BacktrackingWaveFunctionCollapse {
-  static const Superposition choices = <int>{1, 2, 3, 4, 5, 6, 7, 8, 9};
-
-  @override
-  bool get displayToConsole => false;
+  static const Superposition choices = {1, 2, 3, 4, 5, 6, 7, 8, 9};
 
   const SudokuCollapse();
 
@@ -48,7 +45,7 @@ final class SudokuCollapse extends BacktrackingWaveFunctionCollapse {
     /// We set the root to have *ALL* the other values
     ///   in it removed except the [value].
 
-    Map<Index, Superposition> removal = <Index, Superposition>{};
+    Map<Index, Superposition> removal = {};
 
     /// We set up the breadth first search for propagating collapses.
     Queue<(Index, int)> queue = Queue<(Index, int)>()..add((index, value));
@@ -150,37 +147,112 @@ final class SudokuCollapse extends BacktrackingWaveFunctionCollapse {
   }
 }
 
+typedef IsolateReturn = (int iterations, Wave wave);
+
 Future<Wave> solveSudoku(Board board) async {
   Wave wave = sudoku.generateWave(board);
-  Wave? solved;
 
-  for (var (Wave wave, _, _) in sudoku.collapse(wave)) {
-    solved = wave;
-    stdout.clear();
-    stdout.writeln(sudoku.render(wave));
-    await sleep(Duration(milliseconds: 16));
+  bool hasFinished = false;
+  List<(SendPort, Completer<IsolateReturn?>)> isolates = [];
+
+  for (int i = 0; i < 100; ++i) {
+    /// This is the [ReceivePort] that will be used to communicate with the isolate.
+
+    ReceivePort outerReceivePort = ReceivePort();
+    await Isolate.spawn(((SendPort, Wave, int) payload) async {
+      var (SendPort outerSendPort, Wave wave, int index) = payload;
+
+      ReceivePort cancellationPort = ReceivePort();
+
+      /// Now we start the actual multiprocessing.
+      cancellationPort.listen((dynamic message) {
+        assert(message is bool, "This must only be a [bool].");
+
+        if (message as bool) {
+          outerSendPort.send(null);
+          cancellationPort.close();
+          Isolate.current.kill(priority: Isolate.immediate);
+        }
+      });
+      outerSendPort.send(cancellationPort.sendPort);
+
+      IsolateReturn? solved;
+      for (var (int tries, (Wave wave, _, _)) in sudoku.collapse(wave).indexed) {
+        solved = (tries, wave);
+        await Future<void>.delayed(Duration(milliseconds: 16));
+      }
+
+      if (solved case (int iterations, _) && IsolateReturn solved) {
+        print("Isolate #$index has finished with $iterations iterations.");
+        outerSendPort.send(solved);
+
+        /// How do we kill this?
+      } else {
+        outerSendPort.send(null);
+      }
+    }, (outerReceivePort.sendPort, wave, i));
+
+    int listenIndex = 0;
+
+    Completer<SendPort> sendPortCompleter = Completer<SendPort>();
+    Completer<IsolateReturn?> resultCompleter = Completer<IsolateReturn?>();
+
+    void listener(dynamic message) {
+      switch (listenIndex) {
+        case 0:
+          assert(message is SendPort, "The first message must be a [SendPort].");
+          sendPortCompleter.complete(message as SendPort);
+        case 1:
+          assert(message is IsolateReturn?, "The first message must be a [Wave].");
+
+          if (!hasFinished && message != null) {
+            for (var (SendPort innerSendPort, _) in isolates) {
+              innerSendPort.send(true);
+            }
+          }
+
+          resultCompleter.complete(message as IsolateReturn?);
+          outerReceivePort.close();
+          hasFinished = true;
+
+        default:
+          throw Exception("The listen index of $listenIndex with type ${message.runtimeType} is not handled.");
+      }
+      listenIndex++;
+    }
+
+    outerReceivePort.listen(listener);
+
+    /// Start the isolate.
+    SendPort sendPort = await sendPortCompleter.future;
+
+    isolates.add((sendPort, resultCompleter));
   }
 
-  return switch (solved) {
-    Wave wave => wave,
-    null => throw Error(),
-  };
+  List<(int, Wave)?> solved = await Future.wait([
+    for (var (_, completer) in isolates) completer.future,
+  ]);
+
+  print(solved);
+
+  Wave solution = solved.whereType<(int, Wave)>().first.$2;
+
+  return solution;
 }
 
 void main(List<String> arguments) async {
-  Board board = <List<int>>[
-    <int>[0, 0, 3, 0, 0, 0, 0, 0, 9],
-    <int>[0, 8, 0, 2, 0, 0, 6, 3, 0],
-    <int>[0, 0, 0, 0, 0, 6, 0, 0, 4],
-    <int>[0, 4, 0, 0, 5, 0, 0, 0, 0],
-    <int>[0, 0, 0, 0, 0, 0, 0, 9, 0],
-    <int>[0, 0, 5, 0, 0, 7, 3, 2, 0],
-    <int>[1, 0, 0, 8, 0, 0, 0, 0, 0],
-    <int>[0, 0, 0, 0, 0, 0, 0, 0, 6],
-    <int>[0, 0, 4, 0, 0, 2, 7, 5, 0],
+  Board board = [
+    [0, 0, 3, 0, 0, 0, 0, 0, 9],
+    [0, 8, 0, 2, 0, 0, 6, 3, 0],
+    [0, 0, 0, 0, 0, 6, 0, 0, 4],
+    [0, 4, 0, 0, 5, 0, 0, 0, 0],
+    [0, 0, 0, 0, 0, 0, 0, 9, 0],
+    [0, 0, 5, 0, 0, 7, 3, 2, 0],
+    [1, 0, 0, 8, 0, 0, 0, 0, 0],
+    [0, 0, 0, 0, 0, 0, 0, 0, 6],
+    [0, 0, 4, 0, 0, 2, 7, 5, 0],
   ];
 
-  time(() async {
-    await solveSudoku(board);
-  });
+  Wave solved = await solveSudoku(board);
+  print("Solved with:\n${sudoku.render(solved)}");
 }

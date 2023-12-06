@@ -1,10 +1,7 @@
 import "dart:io";
 
 extension NotNullExtension<E extends Object> on E? {
-  E get notNull => switch (this) {
-        E e => e,
-        null => throw Error(),
-      };
+  E get notNull => this!;
 }
 
 void main() {
